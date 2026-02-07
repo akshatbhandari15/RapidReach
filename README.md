@@ -48,13 +48,6 @@ Planned next steps:
 - `eval/` — metrics, reports, and dashboards
 - `docs/` — study protocol and governance
 
-## Contributing
-- Open an issue to propose an agent, scenario, or dataset.
-- Follow ethics and compliance guidance above.
-- Include clear evaluation criteria for additions.
-
-## Disclaimer
-This repository is for research purposes only. It is not a medical device and must not be used for diagnosis or treatment.
 
 ## Contact
 - Study leads and governance details to be added.
