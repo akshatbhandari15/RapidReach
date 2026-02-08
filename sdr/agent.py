@@ -793,39 +793,9 @@ async def run_sdr_endpoint(req: SDRRequest):
             if not email_to_use:
                 raise ValueError("No email address available")
 
-            # Generate email subject + body with LLM
-            email_subject = f"Website Proposal for {req.business_name} — RapidReach"
+            email_subject = f"Elevate {req.business_name}'s Online Presence — RapidReach"
 
-            # Build a concise HTML body from the proposal
-            proposal_preview = proposal_content[:2000] if proposal_content else ""
-            call_summary = ""
-            if call_transcript:
-                call_summary = f"""
-                <p>Following up on our recent phone conversation, we're excited to share our
-                tailored website solution for {req.business_name}.</p>
-                """
-            else:
-                call_summary = f"""
-                <p>We've been researching {req.business_name} and believe we can help you
-                establish a stronger online presence.</p>
-                """
-
-            html_body = f"""
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #2563eb;">Website Proposal for {req.business_name}</h2>
-                {call_summary}
-                <h3>Our Proposal</h3>
-                <div style="background: #f8fafc; padding: 16px; border-radius: 8px; margin: 16px 0;">
-                    {proposal_preview.replace(chr(10), '<br>')}
-                </div>
-                <p>We've also attached a detailed presentation deck for your review.</p>
-                <p>Looking forward to discussing this with you!</p>
-                <br>
-                <p>Best regards,<br><strong>The RapidReach Team</strong></p>
-            </div>
-            """
-
-            # Build attachment from deck
+            # Build attachment from deck (before email body so we know if we have it)
             attachment_data = None
             if deck_info and deck_info.get("file_data"):
                 attachment_data = {
@@ -835,7 +805,7 @@ async def run_sdr_endpoint(req: SDRRequest):
                 }
                 print(f"📎 Attaching deck: {attachment_data['filename']}")
 
-            # Generate calendar invite
+            # Generate calendar invite (before email body so we can reference the date)
             meeting_dt = extract_meeting_time_from_transcript(call_transcript)
             from common.config import SALES_EMAIL as _sales_email
             calendar_ics = generate_ics(
@@ -847,6 +817,77 @@ async def run_sdr_endpoint(req: SDRRequest):
                 organizer_email=_sales_email or "",
             )
             print(f"📅 Calendar invite for {meeting_dt.strftime('%A %B %d at %I:%M %p')}")
+
+            # ── Build professional HTML email ─────────────────
+            # Extract 3-4 key benefit bullet points from the proposal
+            _bullet_lines = [
+                ln.strip().lstrip("•-*0123456789.) ")
+                for ln in (proposal_content or "").split("\n")
+                if ln.strip() and len(ln.strip()) > 20 and not ln.strip().startswith("#")
+            ]
+            # Deduplicate and keep the first 4 meaningful lines
+            _seen_bullets: set[str] = set()
+            _bullets: list[str] = []
+            for _bl in _bullet_lines:
+                _key = _bl[:40].lower()
+                if _key not in _seen_bullets and len(_bullets) < 4:
+                    _seen_bullets.add(_key)
+                    _bullets.append(_bl[:200])
+
+            _bullet_html = "".join(
+                f'<li style="margin-bottom:8px;color:#374151;">{b}</li>' for b in _bullets
+            ) if _bullets else '<li style="color:#374151;">A modern, mobile-friendly website tailored to your business</li><li style="color:#374151;">Improved local search visibility &amp; customer trust</li><li style="color:#374151;">Online booking, contact forms, and social integration</li>'
+
+            _opening = (
+                f"Thank you for taking the time to speak with us today about {req.business_name}. "
+                "As discussed, we've put together a tailored proposal for your new online presence."
+                if call_transcript
+                else f"We've been looking into {req.business_name} and we see a great opportunity "
+                     "to help you attract more customers with a professional online presence."
+            )
+
+            _meeting_str = meeting_dt.strftime("%A, %B %d at %I:%M %p")
+
+            html_body = f"""\
+<div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:600px;margin:0 auto;color:#1f2937;">
+  <!-- Header -->
+  <div style="background:linear-gradient(135deg,#2563eb,#7c3aed);padding:32px 24px;border-radius:12px 12px 0 0;text-align:center;">
+    <h1 style="color:#ffffff;font-size:22px;margin:0 0 4px;">⚡ RapidReach</h1>
+    <p style="color:#e0e7ff;font-size:13px;margin:0;">AI-Powered Web Solutions</p>
+  </div>
+
+  <!-- Body -->
+  <div style="background:#ffffff;padding:28px 24px;border:1px solid #e5e7eb;border-top:none;">
+    <p style="font-size:15px;line-height:1.6;color:#374151;">Hi {req.business_name} Team,</p>
+
+    <p style="font-size:15px;line-height:1.6;color:#374151;">{_opening}</p>
+
+    <h2 style="font-size:16px;color:#2563eb;margin:24px 0 12px;border-bottom:2px solid #e5e7eb;padding-bottom:8px;">What We're Proposing</h2>
+    <ul style="padding-left:20px;font-size:14px;line-height:1.8;">
+      {_bullet_html}
+    </ul>
+
+    <!-- CTA -->
+    <div style="text-align:center;margin:28px 0;">
+      <a href="mailto:{_sales_email or ''}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:6px;font-weight:600;font-size:14px;">Schedule a Consultation</a>
+    </div>
+
+    <p style="font-size:14px;color:#6b7280;line-height:1.6;">
+      📎 We've attached a detailed presentation deck for your review.<br>
+      📅 A calendar invite has been included for <strong>{_meeting_str}</strong> so we can walk you through everything.
+    </p>
+
+    <p style="font-size:15px;line-height:1.6;color:#374151;margin-top:24px;">
+      Looking forward to helping {req.business_name} grow!
+    </p>
+  </div>
+
+  <!-- Footer -->
+  <div style="background:#f9fafb;padding:20px 24px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 12px 12px;text-align:center;">
+    <p style="font-size:14px;color:#374151;margin:0 0 4px;"><strong>The RapidReach Team</strong></p>
+    <p style="font-size:12px;color:#9ca3af;margin:0;">AI-Powered Sales Development &bull; rapidreach.ai</p>
+  </div>
+</div>"""
 
             email_result = await send_email(
                 to_email=email_to_use,
@@ -967,4 +1008,31 @@ Step Results:
 
 @app.get("/api/sessions")
 async def get_sessions():
-    return {"sessions": {k: v.model_dump() for k, v in sdr_sessions.items()}}
+    """Return SDR sessions — in-memory first, fall back to BigQuery."""
+    # If we have in-memory sessions, return those
+    if sdr_sessions:
+        return {"sessions": {k: v.model_dump() for k, v in sdr_sessions.items()}}
+
+    # Otherwise try to fetch from BigQuery
+    try:
+        from sdr.tools.bigquery_utils import _get_client
+        from common.config import GOOGLE_CLOUD_PROJECT, BIGQUERY_DATASET, BIGQUERY_SDR_SESSIONS_TABLE
+        client = _get_client()
+        if client:
+            table_ref = f"{GOOGLE_CLOUD_PROJECT}.{BIGQUERY_DATASET}.{BIGQUERY_SDR_SESSIONS_TABLE}"
+            query = f"SELECT * FROM `{table_ref}` ORDER BY created_at DESC LIMIT 50"
+            rows = client.query(query).result()
+            sessions = {}
+            for row in rows:
+                row_dict = dict(row)
+                sid = row_dict.get("session_id", "")
+                # Convert any non-serializable types
+                for k, v in row_dict.items():
+                    if hasattr(v, 'isoformat'):
+                        row_dict[k] = v.isoformat()
+                sessions[sid] = row_dict
+            return {"sessions": sessions}
+    except Exception as e:
+        logger.warning(f"BigQuery session fetch failed: {e}")
+
+    return {"sessions": {}}

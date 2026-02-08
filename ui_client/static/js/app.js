@@ -10,21 +10,14 @@ const state = {
     connected: false,
     businesses: [],
     events: [],
+    sdrSessions: [],      // populated from /api/sdr_sessions
+    meetingsData: [],      // populated from /api/meetings + SDR invites
     stats: {
         totalLeads: 0,
         contacted: 0,
         meetings: 0,
-        hotLeads: 0,
+        emailsSent: 0,
     },
-    autoRefresh: {
-        enabled: true,
-        intervals: {},
-        lastUpdate: {
-            businesses: 0,
-            sdrSessions: 0,
-            meetings: 0,
-        }
-    }
 };
 
 // ── WebSocket ────────────────────────────────────────────────
@@ -134,9 +127,9 @@ function handleAgentEvent(evt) {
         updateStats();
     }
 
-    if (evt.event === 'hot_lead_detected') {
-        state.stats.hotLeads++;
-        updateStats();
+    // On SDR completion, refresh outreach data and stats
+    if (evt.event === 'sdr_completed') {
+        fetchSDRSessions();
     }
 
     // Re-enable buttons on completion/error
@@ -160,13 +153,18 @@ function updateConnectionStatus(connected) {
 
 function updateStats() {
     const totalLeads = state.businesses.length;
-    const contacted = state.businesses.filter(b => b.lead_status !== 'new').length;
-    const hotLeads = state.businesses.filter(b => b.lead_status === 'hot_lead').length;
+    // Count contacted from businesses with non-new status OR from SDR sessions
+    const contactedFromLeads = state.businesses.filter(b => b.lead_status && b.lead_status !== 'new').length;
+    const contacted = Math.max(contactedFromLeads, state.sdrSessions.length);
+    const emailsSent = state.sdrSessions.filter(s => s.email_sent).length;
+    const meetings = state.sdrSessions.filter(s =>
+        s.call_outcome === 'interested' || s.call_outcome === 'agreed_to_email'
+    ).length + state.meetingsData.length;
 
     setStatValue('stat-leads', totalLeads);
     setStatValue('stat-contacted', contacted);
-    setStatValue('stat-meetings', state.stats.meetings);
-    setStatValue('stat-hot', hotLeads || state.stats.hotLeads);
+    setStatValue('stat-meetings', meetings);
+    setStatValue('stat-emails', emailsSent);
 }
 
 function setStatValue(id, value) {
@@ -351,7 +349,70 @@ function switchTab(tabName) {
     }
 }
 
+// ── Fetch SDR Sessions (for stats + outreach tab) ────────────
+
+async function fetchSDRSessions() {
+    try {
+        const resp = await fetch('/api/sdr_sessions');
+        const data = await resp.json();
+        if (data.sessions) {
+            state.sdrSessions = Object.values(data.sessions);
+            updateStats();
+            // If outreach tab is active, re-render it
+            const activeTab = document.querySelector('.tab.active');
+            if (activeTab && activeTab.dataset.tab === 'outreach') {
+                renderOutreachTab();
+            }
+        }
+    } catch (e) {
+        console.warn('Failed to fetch SDR sessions:', e);
+    }
+}
+
 // ── Load SDR Outreach Data ───────────────────────────────────
+
+function renderOutreachTab() {
+    const container = document.getElementById('outreach-log');
+    if (!container) return;
+
+    if (state.sdrSessions.length === 0) {
+        container.innerHTML = '<div style="color:var(--text-dim); text-align:center; padding:40px;">No SDR outreach sessions yet. Run SDR on a lead to see data here.</div>';
+        return;
+    }
+
+    const html = state.sdrSessions.map(session => {
+        const outcomeColors = {
+            'interested': 'var(--green)',
+            'agreed_to_email': 'var(--accent)',
+            'not_interested': 'var(--red)',
+            'no_answer': 'var(--text-dim)',
+            'other': 'var(--yellow)',
+        };
+        const outcomeColor = outcomeColors[session.call_outcome] || 'var(--text-dim)';
+        const outcomeLabel = (session.call_outcome || 'unknown').replace('_', ' ');
+
+        return `
+            <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:12px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                    <strong style="font-size:15px;">${escapeHtml(session.business_name || 'Unknown Business')}</strong>
+                    <span style="font-size:12px;color:var(--text-dim);">${session.created_at ? new Date(session.created_at).toLocaleString() : ''}</span>
+                </div>
+                <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
+                    <span style="font-size:12px;padding:3px 10px;border-radius:12px;background:${outcomeColor}22;color:${outcomeColor};border:1px solid ${outcomeColor}44;">
+                        📞 ${escapeHtml(outcomeLabel)}
+                    </span>
+                    <span style="font-size:12px;padding:3px 10px;border-radius:12px;background:${session.email_sent ? 'var(--green)' : 'var(--red)'}22;color:${session.email_sent ? 'var(--green)' : 'var(--red)'};border:1px solid ${session.email_sent ? 'var(--green)' : 'var(--red)'}44;">
+                        ✉️ ${session.email_sent ? 'Email Sent' : 'No Email'}
+                    </span>
+                </div>
+                ${session.email_subject ? `<div style="font-size:13px;color:var(--text-dim);margin-bottom:4px;">📧 <em>${escapeHtml(session.email_subject)}</em></div>` : ''}
+                ${session.research_summary ? `<div style="font-size:12px;color:var(--text-dim);margin-top:6px;line-height:1.4;">${escapeHtml((session.research_summary || '').substring(0, 150))}${(session.research_summary || '').length > 150 ? '...' : ''}</div>` : ''}
+            </div>
+        `;
+    }).join('');
+
+    container.innerHTML = html;
+}
 
 async function loadSDROutreach(silent = false) {
     const container = document.getElementById('outreach-log');
@@ -361,48 +422,8 @@ async function loadSDROutreach(silent = false) {
         container.innerHTML = '<div style="text-align:center; padding:20px;">Loading SDR outreach data...</div>';
     }
 
-    try {
-        const resp = await fetch('/api/sdr_sessions');
-        const data = await resp.json();
-        
-        if (data.error) {
-            if (!silent) {
-                container.innerHTML = `<div style="color:var(--danger); text-align:center; padding:20px;">Error loading SDR data: ${data.error}</div>`;
-            }
-            return;
-        }
-
-        const sessions = data.sessions || {};
-        const sessionList = Object.values(sessions);
-
-        if (sessionList.length === 0) {
-            container.innerHTML = '<div style="color:var(--text-dim); text-align:center; padding:40px;">No SDR outreach sessions yet. Run SDR on a lead to see data here.</div>';
-            return;
-        }
-
-        const html = sessionList.map(session => `
-            <div class="event-item full-width">
-                <div class="event-header">
-                    <strong>${escapeHtml(session.business_name || 'Unknown Business')}</strong>
-                    <span class="timestamp">${new Date(session.created_at || Date.now()).toLocaleString()}</span>
-                </div>
-                <div class="event-body">
-                    <div><strong>Outcome:</strong> ${escapeHtml(session.call_outcome || 'unknown')}</div>
-                    <div><strong>Email Sent:</strong> ${session.email_sent ? 'Yes' : 'No'}</div>
-                    ${session.email_subject ? `<div><strong>Subject:</strong> ${escapeHtml(session.email_subject)}</div>` : ''}
-                    <div style="margin-top:8px; font-size:13px; color:var(--text-dim);">
-                        Research: ${session.research_summary ? session.research_summary.substring(0, 100) + '...' : 'N/A'}
-                    </div>
-                </div>
-            </div>
-        `).join('');
-
-        container.innerHTML = html;
-
-    } catch (error) {
-        console.error('Failed to load SDR outreach:', error);
-        container.innerHTML = `<div style="color:var(--danger); text-align:center; padding:20px;">Failed to load SDR outreach data</div>`;
-    }
+    await fetchSDRSessions();
+    renderOutreachTab();
 }
 
 // ── Load Meetings Data ──────────────────────────────────────
@@ -416,37 +437,56 @@ async function loadMeetings(silent = false) {
     }
 
     try {
-        const resp = await fetch('/api/meetings');
-        const data = await resp.json();
-        
-        if (data.error) {
-            if (!silent) {
-                container.innerHTML = `<div style="color:var(--danger); text-align:center; padding:20px;">Error loading meetings: ${data.error}</div>`;
-            }
+        // Fetch from lead_manager
+        let meetings = [];
+        try {
+            const resp = await fetch('/api/meetings');
+            const data = await resp.json();
+            meetings = data.meetings || [];
+        } catch (e) {
+            console.warn('Lead manager meetings fetch failed:', e);
+        }
+
+        // Also derive meetings from SDR sessions that sent calendar invites
+        const sdrMeetings = state.sdrSessions
+            .filter(s => s.email_sent && (s.call_outcome === 'interested' || s.call_outcome === 'agreed_to_email' || s.email_sent))
+            .map(s => ({
+                title: `Follow-up: ${s.business_name || 'Unknown'}`,
+                organizer: 'RapidReach Team',
+                attendees: [],
+                start_time: s.created_at,
+                source: 'sdr_outreach',
+                business_name: s.business_name,
+                call_outcome: s.call_outcome,
+            }));
+
+        const allMeetings = [...meetings, ...sdrMeetings];
+        state.meetingsData = allMeetings;
+        updateStats();
+
+        if (allMeetings.length === 0) {
+            container.innerHTML = '<div style="color:var(--text-dim); text-align:center; padding:40px;">No meetings scheduled yet. Run SDR outreach or process emails to see meetings here.</div>';
             return;
         }
 
-        const meetings = data.meetings || [];
-
-        if (meetings.length === 0) {
-            container.innerHTML = '<div style="color:var(--text-dim); text-align:center; padding:40px;">No meetings scheduled yet. Process emails to see scheduled meetings here.</div>';
-            return;
-        }
-
-        const html = meetings.map(meeting => `
-            <div class="event-item full-width">
-                <div class="event-header">
-                    <strong>${escapeHtml(meeting.title || 'Meeting')}</strong>
-                    <span class="timestamp">${new Date(meeting.start_time || Date.now()).toLocaleString()}</span>
+        const html = allMeetings.map(meeting => {
+            const isSDR = meeting.source === 'sdr_outreach';
+            const outcomeLabel = meeting.call_outcome ? ` • ${meeting.call_outcome.replace('_', ' ')}` : '';
+            return `
+                <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:12px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <strong style="font-size:15px;">${escapeHtml(meeting.title || 'Meeting')}</strong>
+                        <span style="font-size:12px;color:var(--text-dim);">${meeting.start_time ? new Date(meeting.start_time).toLocaleString() : ''}</span>
+                    </div>
+                    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                        <span style="font-size:12px;color:var(--text-dim);">👤 ${escapeHtml(meeting.organizer || 'RapidReach')}</span>
+                        ${isSDR ? `<span style="font-size:12px;padding:2px 8px;border-radius:10px;background:var(--accent)22;color:var(--accent);border:1px solid var(--accent)44;">📅 Calendar Invite Sent${outcomeLabel}</span>` : ''}
+                        ${!isSDR && meeting.location ? `<span style="font-size:12px;color:var(--text-dim);">📍 ${escapeHtml(meeting.location)}</span>` : ''}
+                    </div>
+                    ${meeting.description ? `<div style="font-size:12px;color:var(--text-dim);margin-top:8px;line-height:1.4;">${escapeHtml(meeting.description.substring(0, 150))}${meeting.description.length > 150 ? '...' : ''}</div>` : ''}
                 </div>
-                <div class="event-body">
-                    <div><strong>Organizer:</strong> ${escapeHtml(meeting.organizer || 'Unknown')}</div>
-                    <div><strong>Attendees:</strong> ${(meeting.attendees || []).length} people</div>
-                    ${meeting.location ? `<div><strong>Location:</strong> ${escapeHtml(meeting.location)}</div>` : ''}
-                    ${meeting.description ? `<div style="margin-top:8px; font-size:13px; color:var(--text-dim);">${escapeHtml(meeting.description.substring(0, 150))}${meeting.description.length > 150 ? '...' : ''}</div>` : ''}
-                </div>
-            </div>
-        `).join('');
+            `;
+        }).join('');
 
         container.innerHTML = html;
 
@@ -505,136 +545,6 @@ function escapeHtml(str) {
     return div.innerHTML;
 }
 
-// ── Hot Reload / Auto Refresh ────────────────────────────────
-
-function startAutoRefresh() {
-    if (!state.autoRefresh.enabled) return;
-
-    console.log('🔥 Hot reload enabled - Starting auto refresh intervals');
-
-    // Refresh businesses data every 30 seconds
-    state.autoRefresh.intervals.businesses = setInterval(async () => {
-        try {
-            const resp = await fetch('/api/businesses');
-            const data = await resp.json();
-            if (data.businesses && JSON.stringify(data.businesses) !== JSON.stringify(state.businesses)) {
-                console.log('🔄 Auto-refreshing businesses data');
-                state.businesses = data.businesses;
-                renderLeadsTable();
-                updateStats();
-                state.autoRefresh.lastUpdate.businesses = Date.now();
-            }
-        } catch (e) {
-            console.warn('Auto refresh businesses failed:', e);
-        }
-    }, 30000); // 30 seconds
-
-    // Refresh active tab data every 45 seconds
-    state.autoRefresh.intervals.tabs = setInterval(() => {
-        const activeTab = document.querySelector('.tab.active');
-        if (activeTab) {
-            const tabName = activeTab.dataset.tab;
-            if (tabName === 'outreach') {
-                loadSDROutreach(true); // silent reload
-            } else if (tabName === 'meetings') {
-                loadMeetings(true); // silent reload
-            }
-        }
-    }, 45000); // 45 seconds
-
-    // Refresh events every 20 seconds
-    state.autoRefresh.intervals.events = setInterval(async () => {
-        try {
-            const resp = await fetch('/api/events?limit=20');
-            const data = await resp.json();
-            if (data.events && data.events.length > 0) {
-                const latestEvent = data.events[data.events.length - 1];
-                const lastKnownEvent = state.events[state.events.length - 1];
-                
-                if (!lastKnownEvent || latestEvent.timestamp !== lastKnownEvent.timestamp) {
-                    console.log('🔄 Auto-refreshing events');
-                    // Add only new events to avoid duplicates
-                    const newEvents = data.events.filter(evt => 
-                        !state.events.some(existing => existing.timestamp === evt.timestamp)
-                    );
-                    newEvents.forEach(evt => {
-                        addEventToLog(evt);
-                        handleAgentEvent(evt);
-                    });
-                }
-            }
-        } catch (e) {
-            console.warn('Auto refresh events failed:', e);
-        }
-    }, 20000); // 20 seconds
-}
-
-function stopAutoRefresh() {
-    console.log('⏹️ Stopping auto refresh');
-    Object.values(state.autoRefresh.intervals).forEach(interval => {
-        if (interval) clearInterval(interval);
-    });
-    state.autoRefresh.intervals = {};
-}
-
-function toggleAutoRefresh() {
-    const toggle = document.getElementById('hot-reload-toggle');
-    const icon = document.getElementById('hot-reload-icon');
-    const text = document.getElementById('hot-reload-text');
-    
-    state.autoRefresh.enabled = !state.autoRefresh.enabled;
-    
-    if (state.autoRefresh.enabled) {
-        startAutoRefresh();
-        toggle.classList.add('active');
-        icon.textContent = '🔄';
-        text.textContent = 'Auto-refresh: ON';
-        showToast('🔥 Hot reload enabled', 'success');
-    } else {
-        stopAutoRefresh();
-        toggle.classList.remove('active');
-        icon.textContent = '🔄';
-        text.textContent = 'Auto-refresh: OFF';
-        showToast('⏹️ Hot reload disabled', 'info');
-    }
-}
-
-function showToast(message, type = 'info') {
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    toast.textContent = message;
-    
-    // Add toast styles if not already present
-    if (!document.getElementById('toast-styles')) {
-        const styles = document.createElement('style');
-        styles.id = 'toast-styles';
-        styles.textContent = `
-            .toast {
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                padding: 12px 16px;
-                border-radius: 6px;
-                color: white;
-                font-size: 14px;
-                font-weight: 500;
-                z-index: 10000;
-                animation: toastSlide 0.3s ease, toastFade 0.3s ease 2.7s;
-            }
-            .toast-success { background: #22c55e; }
-            .toast-info { background: #3b82f6; }
-            .toast-warning { background: #f59e0b; }
-            .toast-error { background: #ef4444; }
-            @keyframes toastSlide { from { transform: translateX(100%); } to { transform: translateX(0); } }
-            @keyframes toastFade { from { opacity: 1; } to { opacity: 0; } }
-        `;
-        document.head.appendChild(styles);
-    }
-    
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
-}
-
 // ── Init ─────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -644,12 +554,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.tab').forEach(tab => {
         tab.addEventListener('click', () => switchTab(tab.dataset.tab));
     });
-    
-    // Initialize hot reload as enabled by default
-    setTimeout(() => {
-        const toggle = document.getElementById('hot-reload-toggle');
-        if (toggle && !state.autoRefresh.enabled) {
-            toggleAutoRefresh();
-        }
-    }, 1000); // Wait 1 second for everything to load before starting auto-refresh
+
+    // Fetch SDR sessions on page load to populate stats
+    fetchSDRSessions();
 });
