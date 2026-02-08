@@ -102,60 +102,6 @@ RapidReach is built as a production-grade multi-agent system with impressive sca
 | 13 | **Calendar Organizer Sub-Agent** | API Writer | Google Calendar API + Meet |
 | 14 | **Post-Action Sub-Agent** | Data Pipeline | BigQuery + Gmail (mark read) |
 
-### 🛠️ 12+ Integrated Tools
-
-| Tool | API / Library | Purpose |
-|:-----|:-------------|:--------|
-| Google Maps Search | Places API (New) | Discover businesses without websites |
-| Brave Search MCP | MCP Server | Deep web research on prospects |
-| Google Search MCP | MCP Server | Fallback research when Brave unavailable |
-| ElevenLabs Phone | Conversational AI API | AI-powered cold calls with transcripts |
-| Gmail Send | Gmail API (OAuth2) | Branded HTML email with attachments |
-| Gmail Read | Gmail API (OAuth2) | Fetch & filter inbound emails |
-| Calendar Create | Google Calendar API | Schedule meetings with Meet links |
-| BigQuery CRUD | BigQuery API (×3 tables) | Persist leads, sessions, meetings |
-| Deck Generator | python-pptx + LLM | Professional PowerPoint decks |
-| ICS Generator | Custom Python | Calendar invite attachments |
-| Email Extractor | Regex + NLP | Parse dictated emails from transcripts |
-| Meeting Time Parser | Regex + NLP | Extract scheduling from spoken text |
-| UI Callback | HTTP POST + WebSocket | Real-time dashboard event streaming |
-
-### 🏗️ 5 Microservices
-
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                        MICROSERVICE TOPOLOGY                            │
-│                                                                         │
-│   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐                  │
-│   │  UI Client   │   │ Lead Finder  │   │  SDR Agent   │                │
-│   │   :8000      │◄─►│   :8081      │   │   :8084      │                │
-│   │  (FastAPI +  │   │ (Dedalus +   │   │ (8-step      │                │
-│   │  WebSocket)  │   │  Maps API)   │   │  pipeline)   │                │
-│   └──────────────┘   └──────────────┘   └──────┬───────┘                │
-│          ▲                                      │                       │
-│          │           ┌─────────────┐   ┌────────▼──────┐                │
-│          └───────────│Lead Manager │   │Deck Generator │                │
-│    callbacks         │   :8082     │   │   :8086       │                │
-│                      │(Gmail+Cal+  │   │(Dedalus +     │                │
-│                      │ BigQuery)   │   │ python-pptx)  │                │
-│                      └─────────────┘   └───────────────┘                │
-│                                                                         │
-│   Communication: HTTP REST + WebSocket callbacks + Dedalus ADK          │
-└──────────────────────────────────────────────────────────────────────────┘
-```
-
-### 🎨 8 Agentic Design Patterns
-
-1. **Agent-as-Tool** — Specialist agents invoked as tool functions by coordinators
-2. **Coordinator + Specialists** — Cheap model routes, strong models execute
-3. **Generator-Critic** — Draft Agent writes → Fact-Check Agent validates → refined output
-4. **Structured Outputs** — Pydantic `response_format` for guaranteed JSON schemas
-5. **Callback Broadcasting** — All services POST to `/agent_callback` → WebSocket fan-out
-6. **Multi-Tier Fallback** — Brave MCP → Google MCP → LLM knowledge → template
-7. **Merge-not-Replace** — New data merges with existing by ID (preserves state across restarts)
-8. **Shared Domain Models** — Pydantic models as single source of truth across all services
-
----
 
 ## 🏗️ System Architecture
 
@@ -228,6 +174,62 @@ graph TB
     style DA fill:#8b5cf6,stroke:#7c3aed,color:#fff
     style BQ fill:#4285F4,stroke:#1a73e8,color:#fff
 ```
+
+
+### 🛠️ 12+ Integrated Tools
+
+| Tool | API / Library | Purpose |
+|:-----|:-------------|:--------|
+| Google Maps Search | Places API (New) | Discover businesses without websites |
+| Brave Search MCP | MCP Server | Deep web research on prospects |
+| Google Search MCP | MCP Server | Fallback research when Brave unavailable |
+| ElevenLabs Phone | Conversational AI API | AI-powered cold calls with transcripts |
+| Gmail Send | Gmail API (OAuth2) | Branded HTML email with attachments |
+| Gmail Read | Gmail API (OAuth2) | Fetch & filter inbound emails |
+| Calendar Create | Google Calendar API | Schedule meetings with Meet links |
+| BigQuery CRUD | BigQuery API (×3 tables) | Persist leads, sessions, meetings |
+| Deck Generator | python-pptx + LLM | Professional PowerPoint decks |
+| ICS Generator | Custom Python | Calendar invite attachments |
+| Email Extractor | Regex + NLP | Parse dictated emails from transcripts |
+| Meeting Time Parser | Regex + NLP | Extract scheduling from spoken text |
+| UI Callback | HTTP POST + WebSocket | Real-time dashboard event streaming |
+
+### 🏗️ 5 Microservices
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                        MICROSERVICE TOPOLOGY                            │
+│                                                                         │
+│   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐                  │
+│   │  UI Client   │   │ Lead Finder  │   │  SDR Agent   │                │
+│   │   :8000      │◄─►│   :8081      │   │   :8084      │                │
+│   │  (FastAPI +  │   │ (Dedalus +   │   │ (8-step      │                │
+│   │  WebSocket)  │   │  Maps API)   │   │  pipeline)   │                │
+│   └──────────────┘   └──────────────┘   └──────┬───────┘                │
+│          ▲                                      │                       │
+│          │           ┌─────────────┐   ┌────────▼──────┐                │
+│          └───────────│Lead Manager │   │Deck Generator │                │
+│    callbacks         │   :8082     │   │   :8086       │                │
+│                      │(Gmail+Cal+  │   │(Dedalus +     │                │
+│                      │ BigQuery)   │   │ python-pptx)  │                │
+│                      └─────────────┘   └───────────────┘                │
+│                                                                         │
+│   Communication: HTTP REST + WebSocket callbacks + Dedalus ADK          │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+### 🎨 8 Agentic Design Patterns
+
+1. **Agent-as-Tool** — Specialist agents invoked as tool functions by coordinators
+2. **Coordinator + Specialists** — Cheap model routes, strong models execute
+3. **Generator-Critic** — Draft Agent writes → Fact-Check Agent validates → refined output
+4. **Structured Outputs** — Pydantic `response_format` for guaranteed JSON schemas
+5. **Callback Broadcasting** — All services POST to `/agent_callback` → WebSocket fan-out
+6. **Multi-Tier Fallback** — Brave MCP → Google MCP → LLM knowledge → template
+7. **Merge-not-Replace** — New data merges with existing by ID (preserves state across restarts)
+8. **Shared Domain Models** — Pydantic models as single source of truth across all services
+
+---
 
 ### Service Overview
 
