@@ -3,17 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SalesShortcut — AI-Powered SDR Dashboard</title>
+    <title>RapidReach — AI-Powered SDR Dashboard</title>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
 
     <!-- ── Header ──────────────────────────────────────── -->
     <div class="header">
-        <h1>⚡ SalesShortcut</h1>
+        <h1>⚡ RapidReach</h1>
         <div class="status-dot" id="status-dot"></div>
         <span class="status-text" id="status-text">Connecting...</span>
         <div class="header-right">
+            <button class="btn btn-sm" id="hot-reload-toggle" onclick="toggleAutoRefresh()" style="margin-right:15px;">
+                <span id="hot-reload-icon">🔄</span>
+                <span id="hot-reload-text">Auto-refresh: OFF</span>
+            </button>
             <span style="font-size:12px; color:var(--text-dim);">AI-Powered SDR System</span>
         </div>
     </div>

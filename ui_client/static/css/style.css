@@ -1,5 +1,5 @@
 /* ================================================================
-   SalesShortcut Dashboard — Styles
+   RapidReach Dashboard — Styles
    ================================================================ */
 
 :root {
@@ -182,6 +182,12 @@ body {
     gap: 8px;
 }
 
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
 .btn-primary {
     background: var(--accent);
     color: white;
@@ -336,6 +342,40 @@ body {
     flex: 1;
 }
 
+/* ── Event Item Variations (for SDR outreach and meetings) ── */
+
+.event-item .event-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.event-item .event-header strong {
+    color: var(--text);
+    font-size: 14px;
+}
+
+.event-item .event-header .timestamp {
+    color: var(--text-dim);
+    font-size: 11px;
+}
+
+.event-item .event-body {
+    color: var(--text-dim);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.event-item .event-body > div {
+    margin-bottom: 2px;
+}
+
+.event-item.full-width {
+    display: block;
+    padding: 12px;
+}
+
 /* ── Human Input Modal ───────────────────────────────────── */
 
 .modal-overlay {
@@ -428,5 +468,50 @@ body {
     border-bottom-color: var(--accent);
 }
 
-.tab-content { display: none; }
+.tab-content { display: none; padding: 16px; }
 .tab-content.active { display: block; }
+
+/* ── Event Items ─────────────────────────────────────────── */
+
+.event-item.full-width {
+    width: 100%;
+    margin-bottom: 12px;
+}
+
+.event-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.event-body {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.4;
+}
+
+.event-body div {
+    margin-bottom: 4px;
+}
+
+/* ── Hot Reload ──────────────────────────────────────────── */
+
+#hot-reload-toggle {
+    transition: all 0.3s ease;
+}
+
+#hot-reload-toggle.active {
+    background: var(--green) !important;
+    color: white !important;
+    border-color: var(--green) !important;
+}
+
+#hot-reload-icon {
+    display: inline-block;
+    transition: transform 0.3s ease;
+}
+
+#hot-reload-toggle.active #hot-reload-icon {
+    animation: spin 2s linear infinite;
+}

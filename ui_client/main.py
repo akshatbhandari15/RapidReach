@@ -1,6 +1,6 @@
 """
 ui_client/main.py
-FastAPI server for the SalesShortcut dashboard.
+FastAPI server for the RapidReach dashboard.
 
 Provides:
   - HTML dashboard at / and /dashboard
@@ -65,7 +65,7 @@ async def lifespan(app: FastAPI):
     logger.info("UI Client shutting down")
 
 
-app = FastAPI(title="SalesShortcut Dashboard", lifespan=lifespan)
+app = FastAPI(title="RapidReach Dashboard", lifespan=lifespan)
 
 # Mount static files
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
@@ -108,18 +108,36 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception:
         pass
 
+    # Start heartbeat task to prevent timeouts
+    async def heartbeat():
+        while websocket in connected_clients:
+            try:
+                await asyncio.sleep(60)  # Send heartbeat every 60 seconds
+                await websocket.send_json({"type": "heartbeat", "timestamp": datetime.utcnow().isoformat()})
+            except Exception:
+                break
+    
+    heartbeat_task = asyncio.create_task(heartbeat())
+
     try:
         while True:
-            # Keep connection alive, receive any client messages
-            data = await websocket.receive_text()
-            # Client can send pings or commands
+            # Keep connection alive with 30-minute timeout, receive any client messages
             try:
-                msg = json.loads(data)
-                if msg.get("type") == "ping":
-                    await websocket.send_json({"type": "pong"})
-            except json.JSONDecodeError:
-                pass
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=1800)  # 30 minutes
+                # Client can send pings or commands
+                try:
+                    msg = json.loads(data)
+                    if msg.get("type") == "ping":
+                        await websocket.send_json({"type": "pong"})
+                    elif msg.get("type") == "heartbeat":
+                        await websocket.send_json({"type": "heartbeat_ack"})
+                except json.JSONDecodeError:
+                    pass
+            except asyncio.TimeoutError:
+                # Send keepalive on timeout
+                await websocket.send_json({"type": "keepalive"})
     except WebSocketDisconnect:
+        heartbeat_task.cancel()
         if websocket in connected_clients:
             connected_clients.remove(websocket)
         logger.info(f"WebSocket client disconnected ({len(connected_clients)} total)")
@@ -242,6 +260,30 @@ async def get_businesses():
 @app.get("/api/events")
 async def get_events(limit: int = 50):
     return {"events": event_log[-limit:], "total": len(event_log)}
+
+
+@app.get("/api/sdr_sessions")
+async def get_sdr_sessions():
+    """Fetch SDR session data from SDR service."""
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(f"{SDR_SERVICE_URL}/api/sessions")
+            return resp.json()
+    except Exception as e:
+        logger.error(f"Failed to fetch SDR sessions: {e}")
+        return {"sessions": {}, "error": str(e)}
+
+
+@app.get("/api/meetings")
+async def get_meetings():
+    """Fetch meetings data from Lead Manager service."""
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(f"{LEAD_MANAGER_SERVICE_URL}/api/meetings")
+            return resp.json()
+    except Exception as e:
+        logger.error(f"Failed to fetch meetings: {e}")
+        return {"meetings": [], "error": str(e)}
 
 
 # ── Human-in-the-loop ───────────────────────────────────────
