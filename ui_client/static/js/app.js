@@ -136,6 +136,21 @@ function handleAgentEvent(evt) {
     if (['search_completed', 'sdr_completed', 'processing_completed', 'error'].includes(evt.event)) {
         enableButtons();
     }
+
+    // Hide loading animation when search finishes or errors
+    if (['search_completed', 'error'].includes(evt.event)) {
+        showLeadsLoading(false);
+    }
+
+    // Hide outreach loading when SDR completes or errors
+    if (['sdr_completed', 'error'].includes(evt.event)) {
+        showTabLoading('outreach', false);
+    }
+
+    // Hide meetings loading when email processing completes or errors
+    if (['processing_completed', 'error'].includes(evt.event)) {
+        showTabLoading('meetings', false);
+    }
 }
 
 // ── UI Updates ───────────────────────────────────────────────
@@ -197,6 +212,10 @@ function addEventToLog(evt) {
     }
 
     state.events.push(evt);
+
+    // Update event count badge
+    const countBadge = document.getElementById('event-count');
+    if (countBadge) countBadge.textContent = `${state.events.length} event${state.events.length !== 1 ? 's' : ''}`;
 }
 
 function renderLeadsTable() {
@@ -241,6 +260,9 @@ async function findLeads() {
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> Searching...';
 
+    // Show loading animation in the leads tab
+    showLeadsLoading(true);
+
     try {
         const resp = await fetch('/start_lead_finding', {
             method: 'POST',
@@ -272,6 +294,10 @@ async function startSDR(name, placeId, email, address, city) {
     const phoneInput = document.getElementById(`phone-${placeId}`);
     const phone = phoneInput ? phoneInput.value.trim() : '';
 
+    // Show loading animation in the outreach tab and switch to it
+    showTabLoading('outreach', true);
+    switchTab('outreach');
+
     try {
         const resp = await fetch('/start_sdr', {
             method: 'POST',
@@ -290,9 +316,11 @@ async function startSDR(name, placeId, email, address, city) {
         const data = await resp.json();
         if (data.status === 'error') {
             alert('SDR Error: ' + data.message);
+            showTabLoading('outreach', false);
         }
     } catch (e) {
         alert('Failed to start SDR: ' + e.message);
+        showTabLoading('outreach', false);
     }
 }
 
@@ -300,6 +328,10 @@ async function processEmails() {
     const btn = document.getElementById('process-emails-btn');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> Processing...';
+
+    // Show loading animation in the meetings tab and switch to it
+    showTabLoading('meetings', true);
+    switchTab('meetings');
 
     try {
         const resp = await fetch('/start_email_processing', {
@@ -316,6 +348,20 @@ async function processEmails() {
     }
 
     enableButtons();
+}
+
+function showLeadsLoading(show) {
+    const overlay = document.getElementById('leads-loading');
+    const table = document.querySelector('#tab-leads .leads-table');
+    if (overlay) overlay.style.display = show ? 'flex' : 'none';
+    if (table) table.style.display = show ? 'none' : 'table';
+}
+
+function showTabLoading(tab, show) {
+    const overlay = document.getElementById(`${tab}-loading`);
+    const content = document.querySelector(`#tab-${tab} .card-body`);
+    if (overlay) overlay.style.display = show ? 'flex' : 'none';
+    if (content) content.style.display = show ? 'none' : 'block';
 }
 
 function enableButtons() {
@@ -427,11 +473,12 @@ async function loadSDROutreach(silent = false) {
     if (!container) return;
 
     if (!silent) {
-        container.innerHTML = '<div style="text-align:center; padding:20px;">Loading SDR outreach data...</div>';
+        showTabLoading('outreach', true);
     }
 
     await fetchSDRSessions();
     renderOutreachTab();
+    showTabLoading('outreach', false);
 }
 
 // ── Load Meetings Data ──────────────────────────────────────
@@ -441,7 +488,7 @@ async function loadMeetings(silent = false) {
     if (!container) return;
 
     if (!silent) {
-        container.innerHTML = '<div style="text-align:center; padding:20px;">Loading meetings data...</div>';
+        showTabLoading('meetings', true);
     }
 
     try {
@@ -503,6 +550,8 @@ async function loadMeetings(silent = false) {
         if (!silent) {
             container.innerHTML = `<div style="color:var(--danger); text-align:center; padding:20px;">Failed to load meetings data</div>`;
         }
+    } finally {
+        showTabLoading('meetings', false);
     }
 }
 

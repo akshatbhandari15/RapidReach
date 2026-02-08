@@ -117,6 +117,12 @@
 
                     <!-- Tab: Leads -->
                     <div class="tab-content active" id="tab-leads">
+                        <!-- Loading overlay -->
+                        <div class="leads-loading" id="leads-loading" style="display:none;">
+                            <div class="leads-loading-spinner"></div>
+                            <p class="leads-loading-text">Searching for leads...</p>
+                            <p class="leads-loading-subtext">Scanning Google Maps for businesses without websites</p>
+                        </div>
                         <div style="overflow-x:auto;">
                             <table class="leads-table">
                                 <thead>
@@ -142,6 +148,12 @@
 
                     <!-- Tab: Outreach -->
                     <div class="tab-content" id="tab-outreach">
+                        <!-- Loading overlay -->
+                        <div class="leads-loading" id="outreach-loading" style="display:none;">
+                            <div class="leads-loading-spinner"></div>
+                            <p class="leads-loading-text">Running SDR outreach...</p>
+                            <p class="leads-loading-subtext">Researching, calling, and emailing the lead</p>
+                        </div>
                         <div class="card-body">
                             <div id="outreach-log" style="color:var(--text-dim); text-align:center; padding:40px;">
                                 SDR outreach events will appear here when you run SDR on a lead.
@@ -151,6 +163,12 @@
 
                     <!-- Tab: Meetings -->
                     <div class="tab-content" id="tab-meetings">
+                        <!-- Loading overlay -->
+                        <div class="leads-loading" id="meetings-loading" style="display:none;">
+                            <div class="leads-loading-spinner"></div>
+                            <p class="leads-loading-text">Processing inbox...</p>
+                            <p class="leads-loading-subtext">Scanning emails and scheduling meetings</p>
+                        </div>
                         <div class="card-body">
                             <div id="meetings-log" style="color:var(--text-dim); text-align:center; padding:40px;">
                                 Scheduled meetings will appear here.

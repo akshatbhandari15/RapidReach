@@ -437,6 +437,43 @@ body {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ── Leads loading overlay ───────────────────────────────── */
+
+.leads-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    gap: 16px;
+}
+
+.leads-loading-spinner {
+    width: 48px;
+    height: 48px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+}
+
+.leads-loading-text {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+.leads-loading-subtext {
+    font-size: 13px;
+    color: var(--text-dim);
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
 /* ── Scrollbar ───────────────────────────────────────────── */
 
 ::-webkit-scrollbar { width: 6px; }
