@@ -66,22 +66,20 @@
                     </div>
                 </div>
 
-                <!-- Email Processing -->
+                <!-- Event Log -->
                 <div class="card">
                     <div class="card-header">
-                        <h2>📧 Email & Meetings</h2>
+                        <h2>📋 Activity Log</h2>
+                        <span class="badge" style="background:var(--surface-2); color:var(--text-dim);" id="event-count">0 events</span>
                     </div>
-                    <div class="card-body">
-                        <p style="font-size:13px; color:var(--text-dim); margin-bottom:10px;">
-                            Scan inbox for replies, detect meeting requests, and auto-schedule.
-                        </p>
-                        <button class="btn btn-secondary" id="process-emails-btn" onclick="processEmails()" style="width:100%;">
-                            📧 Process Inbox
-                        </button>
+                    <div class="event-log" id="event-log">
+                        <div class="event-item" style="color:var(--text-dim); justify-content:center;">
+                            Waiting for events...
+                        </div>
                     </div>
                 </div>
 
-                <!-- SDR Settings -->
+                                <!-- SDR Settings -->
                 <div class="card">
                     <div class="card-header">
                         <h2>⚙️ SDR Settings</h2>
@@ -100,19 +98,6 @@
                                 <option value="creative">Creative (Orange)</option>
                                 <option value="tech">Tech (Indigo)</option>
                             </select>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Event Log -->
-                <div class="card">
-                    <div class="card-header">
-                        <h2>📋 Activity Log</h2>
-                        <span class="badge" style="background:var(--surface-2); color:var(--text-dim);" id="event-count">0 events</span>
-                    </div>
-                    <div class="event-log" id="event-log">
-                        <div class="event-item" style="color:var(--text-dim); justify-content:center;">
-                            Waiting for events...
                         </div>
                     </div>
                 </div>
