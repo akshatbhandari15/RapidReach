@@ -17,6 +17,7 @@ import json
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
+from typing import List, Optional
 
 import httpx
 from fastapi import FastAPI
@@ -30,8 +31,14 @@ from common.models import (
     FindLeadsRequest,
     Lead,
 )
+from lead_finder.prompts import LEAD_FINDER_PROMPT
 from lead_finder.tools.maps_search import search_google_maps
-from lead_finder.tools.bigquery_utils import upload_leads
+from lead_finder.tools.bigquery_utils import (
+    upload_leads,
+    query_leads,
+    query_no_website_leads,
+    upload_no_website_leads,
+)
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -65,17 +72,28 @@ async def notify_ui(callback_url: str, payload: AgentCallback):
 # ── Helper: dedup + merge ────────────────────────────────────
 
 def dedup_leads(raw_leads: list[dict]) -> list[Lead]:
-    """Deduplicate by place_id, merge into Lead models."""
-    seen: set[str] = set()
-    unique: list[Lead] = []
+    """
+    Deduplicate by place_id, merge into Lead models.
+    If two entries share a place_id, keep the one with more data.
+    """
+    seen: dict[str, dict] = {}
     for ld in raw_leads:
         pid = ld.get("place_id", "")
-        if pid and pid in seen:
+        if not pid:
             continue
-        seen.add(pid)
+        if pid in seen:
+            # Merge: fill in blanks from the new record
+            existing = seen[pid]
+            for k, v in ld.items():
+                if v and not existing.get(k):
+                    existing[k] = v
+        else:
+            seen[pid] = ld
+
+    unique: list[Lead] = []
+    for ld in seen.values():
         try:
-            lead = Lead(**ld)
-            unique.append(lead)
+            unique.append(Lead(**ld))
         except Exception:
             continue
     return unique
@@ -85,9 +103,9 @@ def dedup_leads(raw_leads: list[dict]) -> list[Lead]:
 
 async def find_businesses(
     city: str,
-    business_types: list[str] | None = None,
+    business_types: Optional[List[str]] = None,
     radius_km: int = 10,
-    max_results: int = 20,
+    max_results: int = 60,
     exclude_chains: bool = True,
     min_rating: float = 0.0,
 ) -> str:
@@ -110,6 +128,7 @@ async def find_businesses(
 def store_leads(leads_json: str) -> str:
     """
     Persist a JSON list of leads to BigQuery.
+    Also uploads no-website leads to the dedicated table.
     Input should be a JSON string of lead objects.
     Returns upload result summary.
     """
@@ -117,7 +136,16 @@ def store_leads(leads_json: str) -> str:
         leads = json.loads(leads_json)
         if isinstance(leads, dict):
             leads = leads.get("leads", [leads])
-        return upload_leads(leads)
+
+        # Upload to main table
+        main_result = upload_leads(leads)
+
+        # Also upload to no-website table for quick SDR access
+        no_website = [ld for ld in leads if not ld.get("has_website", False)]
+        if no_website:
+            upload_no_website_leads(no_website)
+
+        return main_result
     except Exception as e:
         return json.dumps({"error": str(e), "uploaded": 0})
 
@@ -149,17 +177,18 @@ async def find_leads_endpoint(req: FindLeadsRequest):
         client = AsyncDedalus()
         runner = DedalusRunner(client)
 
-        instructions = f"""You are a lead discovery specialist. Your job is to find local businesses
-in {req.city} that do NOT have websites — these are potential customers for web development services.
-
-Steps:
-1. Call find_businesses with city="{req.city}", business_types={json.dumps(req.business_types or ['restaurant', 'salon', 'plumber', 'dentist', 'auto repair'])},
-   radius_km={req.radius_km}, max_results={req.max_results}, exclude_chains={req.exclude_chains}, min_rating={req.min_rating}.
-2. Review the results — count how many leads were found.
-3. Call store_leads with the leads JSON to persist them to the database.
-4. Provide a final summary: how many leads found, what types, and any notable patterns.
-
-Be thorough. If few results come back, try broader search terms."""
+        # Build the agent instructions from the prompt template + request params
+        business_types = req.business_types or ["restaurant", "salon", "plumber", "dentist", "auto repair"]
+        instructions = (
+            LEAD_FINDER_PROMPT
+            + f"\n\nSearch parameters for this request:\n"
+            f"- City: {req.city}\n"
+            f"- Business types: {json.dumps(business_types)}\n"
+            f"- Radius: {req.radius_km} km\n"
+            f"- Max results: {req.max_results}\n"
+            f"- Exclude chains: {req.exclude_chains}\n"
+            f"- Min rating: {req.min_rating}\n"
+        )
 
         result = await runner.run(
             input=instructions,
@@ -228,6 +257,16 @@ Be thorough. If few results come back, try broader search terms."""
 
 
 @app.get("/api/leads")
-async def get_leads():
-    """Return all discovered leads from memory."""
+async def get_leads(city: Optional[str] = None):
+    """Return all discovered leads — from memory or BigQuery."""
+    if city:
+        # Try BQ first for persistent data
+        bq_result = query_no_website_leads(city=city)
+        try:
+            data = json.loads(bq_result)
+            if data.get("leads"):
+                return data
+        except Exception:
+            pass
+
     return {"leads": [ld.model_dump() for ld in discovered_leads.values()]}
