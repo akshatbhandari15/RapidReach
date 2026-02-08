@@ -819,24 +819,17 @@ async def run_sdr_endpoint(req: SDRRequest):
             print(f"📅 Calendar invite for {meeting_dt.strftime('%A %B %d at %I:%M %p')}")
 
             # ── Build professional HTML email ─────────────────
-            # Extract 3-4 key benefit bullet points from the proposal
-            _bullet_lines = [
-                ln.strip().lstrip("•-*0123456789.) ")
-                for ln in (proposal_content or "").split("\n")
-                if ln.strip() and len(ln.strip()) > 20 and not ln.strip().startswith("#")
-            ]
-            # Deduplicate and keep the first 4 meaningful lines
-            _seen_bullets: set[str] = set()
-            _bullets: list[str] = []
-            for _bl in _bullet_lines:
-                _key = _bl[:40].lower()
-                if _key not in _seen_bullets and len(_bullets) < 4:
-                    _seen_bullets.add(_key)
-                    _bullets.append(_bl[:200])
-
-            _bullet_html = "".join(
-                f'<li style="margin-bottom:8px;color:#374151;">{b}</li>' for b in _bullets
-            ) if _bullets else '<li style="color:#374151;">A modern, mobile-friendly website tailored to your business</li><li style="color:#374151;">Improved local search visibility &amp; customer trust</li><li style="color:#374151;">Online booking, contact forms, and social integration</li>'
+            # Use clean, professional benefit statements (not raw LLM prose)
+            _bullet_html = (
+                '<li style="margin-bottom:8px;color:#374151;">'
+                f'A custom-designed, mobile-responsive website built specifically for {req.business_name}</li>'
+                '<li style="margin-bottom:8px;color:#374151;">'
+                'Search engine optimization (SEO) to help local customers find you online</li>'
+                '<li style="margin-bottom:8px;color:#374151;">'
+                'Integrated booking, contact forms, and social media to drive engagement</li>'
+                '<li style="margin-bottom:8px;color:#374151;">'
+                'Ongoing support, analytics, and performance reporting to track growth</li>'
+            )
 
             _opening = (
                 f"Thank you for taking the time to speak with us today about {req.business_name}. "
@@ -1008,12 +1001,10 @@ Step Results:
 
 @app.get("/api/sessions")
 async def get_sessions():
-    """Return SDR sessions — in-memory first, fall back to BigQuery."""
-    # If we have in-memory sessions, return those
-    if sdr_sessions:
-        return {"sessions": {k: v.model_dump() for k, v in sdr_sessions.items()}}
+    """Return ALL SDR sessions — merged from BigQuery history + in-memory."""
+    sessions = {}
 
-    # Otherwise try to fetch from BigQuery
+    # 1) Load historical sessions from BigQuery first
     try:
         from sdr.tools.bigquery_utils import _get_client
         from common.config import GOOGLE_CLOUD_PROJECT, BIGQUERY_DATASET, BIGQUERY_SDR_SESSIONS_TABLE
@@ -1022,7 +1013,6 @@ async def get_sessions():
             table_ref = f"{GOOGLE_CLOUD_PROJECT}.{BIGQUERY_DATASET}.{BIGQUERY_SDR_SESSIONS_TABLE}"
             query = f"SELECT * FROM `{table_ref}` ORDER BY created_at DESC LIMIT 50"
             rows = client.query(query).result()
-            sessions = {}
             for row in rows:
                 row_dict = dict(row)
                 sid = row_dict.get("session_id", "")
@@ -1031,8 +1021,11 @@ async def get_sessions():
                     if hasattr(v, 'isoformat'):
                         row_dict[k] = v.isoformat()
                 sessions[sid] = row_dict
-            return {"sessions": sessions}
     except Exception as e:
         logger.warning(f"BigQuery session fetch failed: {e}")
 
-    return {"sessions": {}}
+    # 2) Overlay in-memory sessions (freshest state wins)
+    for k, v in sdr_sessions.items():
+        sessions[k] = v.model_dump()
+
+    return {"sessions": sessions}

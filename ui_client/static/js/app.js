@@ -153,13 +153,12 @@ function updateConnectionStatus(connected) {
 
 function updateStats() {
     const totalLeads = state.businesses.length;
-    // Count contacted from businesses with non-new status OR from SDR sessions
-    const contactedFromLeads = state.businesses.filter(b => b.lead_status && b.lead_status !== 'new').length;
-    const contacted = Math.max(contactedFromLeads, state.sdrSessions.length);
+    // Contacted = number of SDR outreach sessions run (each = one business contacted)
+    const contacted = state.sdrSessions.length;
+    // Emails sent = sessions where email was successfully delivered
     const emailsSent = state.sdrSessions.filter(s => s.email_sent).length;
-    const meetings = state.sdrSessions.filter(s =>
-        s.call_outcome === 'interested' || s.call_outcome === 'agreed_to_email'
-    ).length + state.meetingsData.length;
+    // Meetings = calendar invites sent (email_sent sessions = invite was attached)
+    const meetings = emailsSent;
 
     setStatValue('stat-leads', totalLeads);
     setStatValue('stat-contacted', contacted);
@@ -356,7 +355,18 @@ async function fetchSDRSessions() {
         const resp = await fetch('/api/sdr_sessions');
         const data = await resp.json();
         if (data.sessions) {
-            state.sdrSessions = Object.values(data.sessions);
+            const incoming = Object.values(data.sessions);
+            // Merge: keep existing sessions, update/add by session_id
+            const byId = {};
+            state.sdrSessions.forEach(s => {
+                const id = s.session_id || s.business_name;
+                byId[id] = s;
+            });
+            incoming.forEach(s => {
+                const id = s.session_id || s.business_name;
+                byId[id] = s;          // new data wins
+            });
+            state.sdrSessions = Object.values(byId);
             updateStats();
             // If outreach tab is active, re-render it
             const activeTab = document.querySelector('.tab.active');
@@ -405,8 +415,6 @@ function renderOutreachTab() {
                         ✉️ ${session.email_sent ? 'Email Sent' : 'No Email'}
                     </span>
                 </div>
-                ${session.email_subject ? `<div style="font-size:13px;color:var(--text-dim);margin-bottom:4px;">📧 <em>${escapeHtml(session.email_subject)}</em></div>` : ''}
-                ${session.research_summary ? `<div style="font-size:12px;color:var(--text-dim);margin-top:6px;line-height:1.4;">${escapeHtml((session.research_summary || '').substring(0, 150))}${(session.research_summary || '').length > 150 ? '...' : ''}</div>` : ''}
             </div>
         `;
     }).join('');
@@ -447,9 +455,9 @@ async function loadMeetings(silent = false) {
             console.warn('Lead manager meetings fetch failed:', e);
         }
 
-        // Also derive meetings from SDR sessions that sent calendar invites
+        // Derive meetings from SDR sessions that sent calendar invites
         const sdrMeetings = state.sdrSessions
-            .filter(s => s.email_sent && (s.call_outcome === 'interested' || s.call_outcome === 'agreed_to_email' || s.email_sent))
+            .filter(s => s.email_sent)
             .map(s => ({
                 title: `Follow-up: ${s.business_name || 'Unknown'}`,
                 organizer: 'RapidReach Team',
