@@ -181,11 +181,11 @@ graph TB
     %% ── ROW 2: SDR Pipeline spans full width below ──
     subgraph "🧠 SDR Outreach Pipeline  ·  8-Step Sequential"
         SDR["🧠 SDR Coordinator<br/><i>Dedalus ADK (GPT-4.1)</i>"]
-        RA["📚 Research Agent<br/><i>Brave Search MCP</i>"]
-        PA["✍️ Proposal Agent<br/><i>Claude Sonnet 4</i>"]
-        FA["✅ Fact-Check Agent<br/><i>GPT-4.1</i>"]
-        CA["🏷️ Classifier Agent<br/><i>GPT-4.1 + Pydantic</i>"]
-        DA["📊 Deck Generator<br/><i>python-pptx</i>"]
+        RA["📚 Research Agent<br/><i>Brave Search MCP + Dedalus ADK (GPT-4.1)</i>"]
+        PA["✍️ Proposal Agent<br/><i>Dedalus ADK (Claude Sonnet 4)</i>"]
+        FA["✅ Fact-Check Agent<br/><i>Dedalus ADK (GPT-4.1)</i>"]
+        CA["🏷️ Classifier Agent<br/><i>Dedalus ADK (GPT-4.1) + Pydantic</i>"]
+        DA["📊 Deck Generator<br/><i>Dedalus ADK (GPT-4.1) + python-pptx</i>"]
 
         SDR --> RA --> PA --> FA --> CA --> DA
     end
