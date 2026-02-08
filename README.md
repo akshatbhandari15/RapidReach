@@ -163,6 +163,7 @@ RapidReach is built as a production-grade multi-agent system with impressive sca
 
 ```mermaid
 graph TB
+    %% ── Row 1: Dashboard + Lead Discovery + External Services ──
     subgraph "🖥️ Dashboard"
         UI["🖥️ UI Client<br/><i>FastAPI + WebSocket</i>"]
     end
@@ -172,59 +173,62 @@ graph TB
         MAPS["🗺️ Google Maps<br/><i>Places API</i>"]
     end
 
-    subgraph "🧠 SDR Outreach Pipeline"
-        SDR["🧠 SDR Coordinator<br/><i>Dedalus ADK (GPT-4.1)</i>"]
-        RA["📚 Research Agent<br/><i>Dedalus ADK + Brave MCP</i>"]
-        PA["✍️ Proposal Agent<br/><i>Dedalus ADK (Claude Sonnet 4)</i>"]
-        FA["✅ Fact-Check Agent<br/><i>Dedalus ADK (GPT-4.1)</i>"]
-        CA["🏷️ Classifier Agent<br/><i>Dedalus ADK (GPT-4.1 + Pydantic)</i>"]
-        DA["📊 Deck Generator<br/><i>Dedalus ADK + python-pptx</i>"]
-    end
-
     subgraph "📞 Voice & Email"
         XI["📞 AI Phone Call<br/><i>ElevenLabs Conv. AI</i>"]
-        GMAIL["📧 Email Sender<br/><i>Gmail API (Google Cloud)</i>"]
+        GMAIL["📧 Email Sender<br/><i>Gmail API</i>"]
     end
 
+    %% ── Row 2: SDR Pipeline (wide, below the top 3) ──
+    subgraph "🧠 SDR Outreach Pipeline — 8-Step Sequential"
+        SDR["🧠 SDR Coordinator<br/><i>Dedalus ADK (GPT-4.1)</i>"]
+        RA["📚 Research Agent<br/><i>Brave Search MCP</i>"]
+        PA["✍️ Proposal Agent<br/><i>Claude Sonnet 4</i>"]
+        FA["✅ Fact-Check Agent<br/><i>GPT-4.1</i>"]
+        CA["🏷️ Classifier Agent<br/><i>GPT-4.1 + Pydantic</i>"]
+        DA["📊 Deck Generator<br/><i>python-pptx</i>"]
+
+        SDR -->|"1. research"| RA
+        SDR -->|"2. draft"| PA
+        SDR -->|"3. validate"| FA
+        SDR -->|"5. classify"| CA
+        SDR -->|"6. deck"| DA
+    end
+
+    %% ── Row 3: Data Layer ──
     subgraph "💾 Data Layer"
         BQ["💾 BigQuery<br/><i>Google Cloud</i>"]
     end
 
-    %% User triggers
+    %% ── Connections: Top row ──
     UI -->|"Find Leads"| LF
     UI -->|"Run SDR"| SDR
+    LF -->|"discover"| MAPS
 
-    %% Lead Finder flow
-    LF -->|"discover businesses"| MAPS
-    LF -->|"persist leads"| BQ
-
-    %% SDR Pipeline — sequential
-    SDR -->|"1. research"| RA
-    SDR -->|"2. draft"| PA
-    SDR -->|"3. validate"| FA
+    %% ── Connections: SDR ↔ External ──
     SDR -->|"4. call"| XI
-    SDR -->|"5. classify"| CA
-    SDR -->|"6. generate deck"| DA
-    SDR -->|"7. send email + deck"| GMAIL
+    SDR -->|"7. email + deck"| GMAIL
+
+    %% ── Connections: Data persistence ──
+    LF -->|"persist leads"| BQ
     SDR -->|"save session"| BQ
 
-    %% Callbacks
+    %% ── Callbacks (dotted) ──
     LF -.->|"callback"| UI
     SDR -.->|"callback"| UI
 
-    %% Styles
+    %% ── Styles ──
+    style UI fill:#6366f1,stroke:#4f46e5,color:#fff
     style LF fill:#10b981,stroke:#059669,color:#fff
+    style MAPS fill:#4285F4,stroke:#1a73e8,color:#fff
     style SDR fill:#f59e0b,stroke:#d97706,color:#000
     style RA fill:#fbbf24,stroke:#f59e0b,color:#000
     style PA fill:#fbbf24,stroke:#f59e0b,color:#000
     style FA fill:#fbbf24,stroke:#f59e0b,color:#000
     style CA fill:#fbbf24,stroke:#f59e0b,color:#000
     style DA fill:#8b5cf6,stroke:#7c3aed,color:#fff
-    style UI fill:#6366f1,stroke:#4f46e5,color:#fff
-    style MAPS fill:#4285F4,stroke:#1a73e8,color:#fff
-    style BQ fill:#4285F4,stroke:#1a73e8,color:#fff
-    style GMAIL fill:#4285F4,stroke:#1a73e8,color:#fff
     style XI fill:#1a1a2e,stroke:#16213e,color:#fff
+    style GMAIL fill:#4285F4,stroke:#1a73e8,color:#fff
+    style BQ fill:#4285F4,stroke:#1a73e8,color:#fff
 ```
 
 ### Service Overview
